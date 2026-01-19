@@ -1,144 +1,114 @@
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN ADAPTADA PARA GITHUB ---
 $objetivo = $env:TARGET_DOMAIN
-$tuNombre = "Auditoría Automática"
-$puertos = @(21, 22, 25, 53, 80, 110, 143, 443, 3306, 3389)
+if (-not $objetivo) { $objetivo = "google.com" } # Dominio por defecto
+$tuNombre = "Jonathan Segovia"
+$puertos = @(21, 22, 25, 53, 80, 110, 143, 443, 465, 587, 993, 995, 1433, 3306, 3389, 5432, 8080)
 
-# AJUSTE PARA GITHUB: Guardar en la carpeta actual
-$reportePath = Join-Path $PSScriptRoot "Reporte_Seguridad.html"
+# El reporte se guarda en la carpeta actual para que GitHub pueda subirlo
+$reportePath = "Reporte_Seguridad.html"
 
-# Configuración de red
-try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-} catch {}
-try {
-    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-} catch {}
+# Configuración de red avanzada
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
-Write-Host "Iniciando escaneo de puertos sobre $objetivo..." -ForegroundColor Cyan
+Write-Host "`n--- INICIANDO AUDITORÍA DETALLADA: $objetivo ---" -ForegroundColor Cyan
 
-# 1. Inteligencia de Red
+# 1. Inteligencia de Red (IP y Geo)
 try {
     $ip = [System.Net.Dns]::GetHostAddresses($objetivo) | Select-Object -First 1 -ExpandProperty IPAddressToString
-} catch {
-    $ip = "No resuelta"
-}
+    $geo = Invoke-RestMethod -Uri "https://ipapi.co/$ip/json/" -ErrorAction SilentlyContinue
+} catch { $ip = "No resuelta"; $geo = @{ city="N/A"; country_name="N/A"; org="N/A" } }
 
-# 2. Escaneo de Puertos
-$resultados = New-Object System.Collections.Generic.List[PSObject]
+# 2. Configuración de Runspaces (Multithreading)
+$RunspacePool = [runspacefactory]::CreateRunspacePool(1, 15)
+$RunspacePool.Open()
+$Jobs = New-Object System.Collections.Generic.List[PSCustomObject]
 
-foreach ($p in $puertos) {
-    $socket = New-Object System.Net.Sockets.TcpClient
+$ScriptBlock = {
+    param($obj, $p)
     $res = [PSCustomObject]@{ Puerto = $p; Estado = "CERRADO"; Banner = "N/A"; Riesgo = "SEGURO"; Desc = "Puerto protegido." }
-
-    try {
-        $conn = $socket.BeginConnect($objetivo, $p, $null, $null)
-        $wait = $conn.AsyncWaitHandle.WaitOne(1000, $false)
-
-        if ($wait) {
-            $socket.EndConnect($conn) | Out-Null
+    $socket = New-Object System.Net.Sockets.TcpClient
+    $conn = $socket.BeginConnect($obj, $p, $null, $null)
+    if ($conn.AsyncWaitHandle.WaitOne(1200, $false)) {
+        try {
+            $socket.EndConnect($conn)
             $res.Estado = "ABIERTO"
-
-            # Clasificación de Riesgo
-            switch ($p) {
-                21   { $res.Riesgo = "CRÍTICO"; $res.Desc = "FTP: Transferencia de archivos sin cifrar." }
-                22   { $res.Riesgo = "BAJO"; $res.Desc = "SSH: Acceso seguro a la terminal." }
-                25   { $res.Riesgo = "MEDIO"; $res.Desc = "SMTP: Envío de correo sin cifrar." }
-                53   { $res.Riesgo = "MEDIO"; $res.Desc = "DNS: Consultas de nombres de dominio." }
-                80   { $res.Riesgo = "ALTO"; $res.Desc = "HTTP: Tráfico web sin cifrar." }
-                110  { $res.Riesgo = "ALTO"; $res.Desc = "POP3: Recepción de correo sin cifrar." }
-                143  { $res.Riesgo = "ALTO"; $res.Desc = "IMAP: Recepción de correo sin cifrar." }
-                443  { $res.Riesgo = "SEGURO"; $res.Desc = "HTTPS: Tráfico web cifrado." }
-                3306 { $res.Riesgo = "CRÍTICO"; $res.Desc = "MySQL: Base de datos expuesta." }
-                3389 { $res.Riesgo = "CRÍTICO"; $res.Desc = "RDP: Escritorio remoto expuesto." }
+            $eval = switch ($p) {
+                21   { @("CRÍTICO", "FTP: Texto plano, riesgo de robo de credenciales.") }
+                80   { @("ALTO", "HTTP: Tráfico no cifrado.") }
+                3306 { @("CRÍTICO", "MySQL: Base de datos expuesta.") }
+                1433 { @("CRÍTICO", "MSSQL: Base de datos expuesta.") }
+                3389 { @("ALTO", "RDP: Escritorio remoto expuesto.") }
+                443  { @("SEGURO", "HTTPS: Tráfico cifrado estándar.") }
+                default { @("REVISAR", "Servicio detectado en puerto no estándar.") }
             }
-            $res.Banner = "Servicio detectado"
-        }
-    } catch {
-        # El estado por defecto es CERRADO, no se necesita acción
-    } finally {
-        if ($socket) { $socket.Close() }
+            $res.Riesgo = $eval[0]; $res.Desc = $eval[1]
+
+            # Banner Grabbing
+            if ($p -eq 80 -or $p -eq 443 -or $p -eq 8080) {
+                $proto = if ($p -eq 443) { "https" } else { "http" }
+                $req = [System.Net.WebRequest]::Create("${proto}://${obj}")
+                $req.Timeout = 1500; $req.Method = "HEAD"
+                $resp = $req.GetResponse()
+                $res.Banner = $resp.Headers["Server"]
+                $resp.Close()
+            } else {
+                $stream = $socket.GetStream(); $stream.ReadTimeout = 1000
+                $buffer = New-Object Byte[] 1024
+                if ($stream.CanRead) {
+                    $bytes = $stream.Read($buffer, 0, $buffer.Length)
+                    $res.Banner = ([System.Text.Encoding]::ASCII.GetString($buffer, 0, $bytes) -replace '[^ -~]', '').Trim()
+                }
+            }
+        } catch { $res.Banner = "Servicio activo (Banner oculto)" }
     }
-
-    $resultados.Add($res)
+    $socket.Close(); return $res
 }
 
-# 3. Generación de Reporte HTML
-$riesgoColor = @{
-    "SEGURO" = "#28a745"
-    "BAJO"   = "#17a2b8"
-    "MEDIO"  = "#ffc107"
-    "ALTO"   = "#fd7e14"
-    "CRÍTICO"= "#dc3545"
+# 3. Lanzamiento
+foreach ($p in $puertos) {
+    $ps = [powershell]::Create().AddScript($ScriptBlock).AddArgument($objetivo).AddArgument($p)
+    $ps.RunspacePool = $RunspacePool
+    $Jobs.Add([PSCustomObject]@{ Pipe = $ps; Result = $ps.BeginInvoke() })
 }
 
+while ($Jobs.Result.IsCompleted -contains $false) { Start-Sleep -Milliseconds 100 }
+$resultados = foreach ($j in $Jobs) { $j.Pipe.EndInvoke($j.Result); $j.Pipe.Dispose() }
+$RunspacePool.Close()
+
+# 4. HTML (Simplificado para compatibilidad)
 $html = @"
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte de Seguridad - $objetivo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
+        .dashboard { max-width: 900px; margin: auto; background: #161b22; padding: 20px; border-radius: 8px; border: 1px solid #30363d; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #21262d; padding: 10px; text-align: left; color: #58a6ff; }
+        td { padding: 10px; border-bottom: 1px solid #30363d; }
+        .ABIERTO { color: #f85149; font-weight: bold; }
+        .CRÍTICO { background: #f85149; color: white; padding: 2px 5px; border-radius: 3px; }
+    </style>
 </head>
-<body class="bg-gray-900 text-white font-sans">
-
-    <div class="container mx-auto p-8">
-
-        <header class="text-center mb-10">
-            <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Security Audit Report</h1>
-            <p class="text-gray-400 mt-2">Generated by $tuNombre on $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')</p>
-        </header>
-
-        <div class="max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8 mb-10">
-            <h2 class="text-2xl font-bold mb-4">Scan Summary</h2>
-            <div class="grid grid-cols-2 gap-4 text-gray-300">
-                <p><strong>Domain Analyzed:</strong></p><p>$objetivo</p>
-                <p><strong>IP Address:</strong></p><p>$ip</p>
-            </div>
-        </div>
-
-        <div class="max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg">
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm text-left text-gray-300">
-                    <thead class="text-xs text-white uppercase bg-gray-700">
-                        <tr>
-                            <th scope="col" class="px-6 py-3">Port</th>
-                            <th scope="col" class="px-6 py-3">Status</th>
-                            <th scope="col" class="px-6 py-3">Risk Level</th>
-                            <th scope="col" class="px-6 py-3">Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    $($resultados | ForEach-Object {
-                        $statusClass = if ($_.Estado -eq 'ABIERTO') { 'text-red-400 font-bold' } else { 'text-green-400' }
-                        $riesgoBg = switch ($_.Riesgo) {
-                            "CRÍTICO" { "bg-red-600" }
-                            "ALTO"    { "bg-orange-500" }
-                            "MEDIO"   { "bg-yellow-500" }
-                            "BAJO"    { "bg-blue-500" }
-                            default   { "bg-green-500" }
-                        }
-                        "<tr class='bg-gray-800 border-b border-gray-700 hover:bg-gray-600'>" +
-                        "<td class='px-6 py-4'>$($_.Puerto)</td>" +
-                        "<td class='px-6 py-4 $statusClass'>$($_.Estado)</td>" +
-                        "<td class='px-6 py-4'><span class='text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-white $riesgoBg'>$($_.Riesgo)</span></td>" +
-                        "<td class='px-6 py-4'>$($_.Desc)</td>" +
-                        "</tr>"
-                    })
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <footer class="text-center mt-10 text-xs text-gray-500">
-            Automated report.
-        </footer>
-
+<body>
+    <div class="dashboard">
+        <h1>Auditoría: $objetivo</h1>
+        <p>IP: $ip | Ubicación: $($geo.city), $($geo.country_name) | Auditor: $tuNombre</p>
+        <table>
+            <thead>
+                <tr><th>Puerto</th><th>Estado</th><th>Banner</th><th>Riesgo</th><th>Análisis</th></tr>
+            </thead>
+            <tbody>
+                $( $resultados | Sort-Object Puerto | ForEach-Object {
+                    "<tr><td>$($_.Puerto)</td><td class='$($_.Estado)'>$($_.Estado)</td><td>$($_.Banner)</td><td><span class='$($_.Riesgo)'>$($_.Riesgo)</span></td><td>$($_.Desc)</td></tr>"
+                } )
+            </tbody>
+        </table>
     </div>
-
 </body>
 </html>
 "@
 
-$html | Out-File -FilePath $reportePath -Encoding UTF8
-Write-Host "Reporte de seguridad guardado en: $reportePath" -ForegroundColor Green
+$html | Out-File $reportePath -Encoding UTF8
