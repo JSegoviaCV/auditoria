@@ -2,6 +2,11 @@ name: Auditoría de Seguridad
 
 on:
   workflow_dispatch:
+    inputs:
+      domain:
+        description: 'The domain to scan'
+        required: true
+        default: 'www.novatium.com.ar'
 
 jobs:
   escanear:
@@ -12,6 +17,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Ejecutar script de escaneo de puertos
+        env:
+          TARGET_DOMAIN: ${{ github.event.inputs.domain }}
         run: pwsh -File ./escaneo.ps1
         shell: pwsh
 
