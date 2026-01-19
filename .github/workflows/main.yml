@@ -9,14 +9,14 @@ jobs:
 
     steps:
       - name: Checkout del código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Ejecutar script de escaneo de puertos
         run: pwsh -File ./escaneo.ps1
         shell: pwsh
 
       - name: Subir reporte como artefacto
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ReporteDeSeguridad
           path: Reporte_Seguridad.html
