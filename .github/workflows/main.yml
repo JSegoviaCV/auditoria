@@ -1,0 +1,22 @@
+name: Auditoría de Seguridad
+
+on:
+  workflow_dispatch:
+
+jobs:
+  escanear:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      - name: Ejecutar script de escaneo de puertos
+        run: pwsh -File ./escaneo.ps1
+        shell: pwsh
+
+      - name: Subir reporte como artefacto
+        uses: actions/upload-artifact@v3
+        with:
+          name: ReporteDeSeguridad
+          path: Reporte_Seguridad.html
