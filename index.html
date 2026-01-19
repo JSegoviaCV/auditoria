@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Audit Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/heroicons/2.0.16/24/outline/hero-icons.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-white font-sans">
+
+    <div class="container mx-auto p-8">
+
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Security Audit Hub</h1>
+            <p class="text-gray-400 mt-2">Your automated security dashboard.</p>
+        </header>
+
+        <!-- Domain Input Form -->
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8 mb-12">
+            <h2 class="text-2xl font-bold mb-6">Start a New Scan</h2>
+            <div class="flex items-center bg-gray-700 rounded-lg p-2">
+                <input type="text" placeholder="Enter domain (e.g., example.com)" class="w-full bg-transparent text-white placeholder-gray-500 focus:outline-none px-4 py-2" id="domain-input" disabled>
+                <button class="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-2 px-6 rounded-lg transition duration-300 ease-in-out" disabled>
+                    Scan Now
+                </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-3">*This form is for demonstration purposes. Please use the GitHub Actions panel to run scans.</p>
+        </div>
+
+        <!-- GitHub Actions Instructions -->
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                How to View Your Report
+            </h2>
+            <ol class="list-decimal list-inside space-y-4 text-gray-300">
+                <li>
+                    <strong>Navigate to the "Actions" tab</strong> in your GitHub repository.
+                </li>
+                <li>
+                    Select the <strong>"Security Audit"</strong> workflow from the list on the left.
+                </li>
+                <li>
+                    Click the <strong>"Run workflow"</strong> dropdown button. You will be prompted to enter the domain to scan.
+                </li>
+                <li>
+                    Once the workflow is complete, a <strong>"ReporteDeSeguridad"</strong> artifact will be available for download on the workflow summary page. This file contains your HTML report.
+                </li>
+            </ol>
+        </div>
+
+    </div>
+
+</body>
+</html>
