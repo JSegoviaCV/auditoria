@@ -1,0 +1,20 @@
+name: Ejecutar Auditoria Tecnica
+on: [workflow_dispatch] # Boton manual
+
+jobs:
+  run-scanner:
+    runs-on: windows-latest
+    steps:
+      - name: Clonar Repositorio
+        uses: actions/checkout@v3
+
+      - name: Ejecutar Script PowerShell
+        shell: powershell
+        run: |
+          ./escaneo.ps1
+
+      - name: Guardar Reporte Final
+        uses: actions/upload-artifact@v3
+        with:
+          name: Reporte-Auditoria
+          path: ./*.html
