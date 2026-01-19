@@ -12,7 +12,7 @@ jobs:
   escanear-y-publicar:
     runs-on: windows-latest
     permissions:
-      contents: write # Permiso necesario para subir el archivo al repo
+      contents: write
 
     steps:
       - name: Checkout del código
@@ -24,10 +24,10 @@ jobs:
         run: pwsh -File ./escaneo.ps1
         shell: pwsh
 
-      - name: Publicar Reporte en GitHub Pages
+      - name: Publicar Reporte
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add Reporte_Seguridad.html
-          git commit -m "Auto-update: Reporte de seguridad para ${{ github.event.inputs.domain }}"
+          git commit -m "Auto-update: Reporte para ${{ github.event.inputs.domain }}" || exit 0
           git push
