@@ -1,29 +1,33 @@
-name: Auditoría de Seguridad
+name: Auditoría de Seguridad con Auto-Publicación
 
 on:
   workflow_dispatch:
     inputs:
       domain:
-        description: 'The domain to scan'
+        description: 'Dominio a escanear'
         required: true
-        default: 'www.novatium.com.ar'
+        default: 'www.google.com'
 
 jobs:
-  escanear:
+  escanear-y-publicar:
     runs-on: windows-latest
+    permissions:
+      contents: write # Permiso necesario para subir el archivo al repo
 
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
 
-      - name: Ejecutar script de escaneo de puertos
+      - name: Ejecutar script de escaneo
         env:
           TARGET_DOMAIN: ${{ github.event.inputs.domain }}
         run: pwsh -File ./escaneo.ps1
         shell: pwsh
 
-      - name: Subir reporte como artefacto
-        uses: actions/upload-artifact@v4
-        with:
-          name: ReporteDeSeguridad
-          path: Reporte_Seguridad.html
+      - name: Publicar Reporte en GitHub Pages
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add Reporte_Seguridad.html
+          git commit -m "Auto-update: Reporte de seguridad para ${{ github.event.inputs.domain }}"
+          git push
