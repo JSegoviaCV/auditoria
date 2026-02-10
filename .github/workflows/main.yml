@@ -1,0 +1,36 @@
+name: Auditoría de Seguridad con Auto-Publicación
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Dominio a escanear'
+        required: true
+        default: 'www.google.com'
+
+jobs:
+  escanear-y-publicar:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Ejecutar script de escaneo
+        env:
+          TARGET_DOMAIN: ${{ github.event.inputs.domain }}
+        run: pwsh -File ./escaneo.ps1
+        shell: pwsh
+
+      - name: Publicar Reporte
+        # Cambiamos a bash para que el comando exit 0 funcione siempre
+        shell: bash
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add Reporte_Seguridad.html
+          # Si no hay cambios, exit 0 ahora sí funcionará correctamente
+          git commit -m "Auto-update: Reporte para ${{ github.event.inputs.domain }}" || exit 0
+          git push
